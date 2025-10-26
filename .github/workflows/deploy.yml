@@ -1,4 +1,4 @@
-name: Deploy to cPanel via FTP
+name: Deploy NestJS to cPanel
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    name: 🚀 Deploy to cPanel
+    name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
     
     steps:
@@ -20,43 +20,50 @@ jobs:
         cache: 'npm'
 
     - name: 📦 Install dependencies
-      run: npm install --legacy-peer-deps
+      run: npm ci --legacy-peer-deps
 
     - name: 🏗️ Build project
       run: |
         npm run build
-        echo "📊 Build completed successfully"
+        echo "✅ Build completed"
 
-    - name: 📁 Prepare deployment files
+    - name: 📁 Create deployment package
       run: |
-        # Hanya deploy folder dist dan package.json
-        mkdir -p deploy-package
-        cp -r dist/ deploy-package/
-        cp package.json deploy-package/
-        cp package-lock.json deploy-package/
+        mkdir -p deploy-dist
+        # Copy built files
+        cp -r dist/ deploy-dist/
+        cp package.json deploy-dist/
+        cp package-lock.json deploy-dist/
         
-        # Buat .env production
-        cat > deploy-package/.env << EOF
+        # Create .env from secrets
+        cat > deploy-dist/.env << 'ENVFILE'
+        # Production Environment
+        NODE_ENV=production
+        PORT=${{ secrets.APP_PORT || 3000 }}
+        
+        # Database
         DB_HOST=${{ secrets.DB_HOST }}
         DB_PORT=${{ secrets.DB_PORT }}
         DB_USERNAME=${{ secrets.DB_USERNAME }}
         DB_PASSWORD=${{ secrets.DB_PASSWORD }}
         DB_NAME=${{ secrets.DB_NAME }}
+        
+        # JWT
         JWT_SECRET=${{ secrets.JWT_SECRET }}
         JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
-        NODE_ENV=production
-        PORT=${{ secrets.APP_PORT || 3000 }}
-        EOF
         
-        echo "📦 Files ready for deployment:"
-        ls -la deploy-package/
+        # CORS
+        CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+        ENVFILE
+        
+        echo "📦 Deployment package ready"
+        ls -la deploy-dist/
 
-    - name: 🚀 Deploy via FTP
-      uses: SamKirkland/FTP-Deploy-Action@4.3.4
+    - name: 🚀 FTP Deploy
+      uses: SamKirkland/FTP-Deploy-Action@4.0.0
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
-        local-dir: ./deploy-package/
+        local-dir: ./deploy-dist/
         server-dir: ${{ secrets.FTP_DEPLOY_PATH }}
-        dangerous-clean-slate: false
