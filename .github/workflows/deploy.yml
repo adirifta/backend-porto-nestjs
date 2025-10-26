@@ -20,20 +20,30 @@ jobs:
         cache: 'npm'
 
     - name: 📦 Install dependencies
-      run: npm ci --legacy-peer-deps
+      run: |
+        npm ci
+        npm install @nestjs/common @nestjs/core @nestjs/platform-express
 
     - name: 🏗️ Build project
       run: |
         npm run build
         echo "✅ Build completed"
+        echo "📁 Build contents:"
+        ls -la dist/
 
     - name: 📁 Create deployment package
       run: |
         mkdir -p deploy-dist
-        # Copy built files
-        cp -r dist/ deploy-dist/
+        
+        # Copy ALL built files
+        cp -r dist/* deploy-dist/
+        
+        # Copy package files
         cp package.json deploy-dist/
         cp package-lock.json deploy-dist/
+        
+        # Create production node_modules
+        npm ci --only=production --prefix ./deploy-dist
         
         # Create .env from secrets
         cat > deploy-dist/.env << 'ENVFILE'
@@ -47,23 +57,75 @@ jobs:
         DB_USERNAME=${{ secrets.DB_USERNAME }}
         DB_PASSWORD=${{ secrets.DB_PASSWORD }}
         DB_NAME=${{ secrets.DB_NAME }}
+        DB_SYNCHRONIZE=${{ secrets.DB_SYNCHRONIZE }}
         
         # JWT
         JWT_SECRET=${{ secrets.JWT_SECRET }}
         JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
+        JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
+        JWT_REFRESH_EXPIRES_IN=${{ secrets.JWT_REFRESH_EXPIRES_IN }}
         
         # CORS
         CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
         ENVFILE
         
-        echo "📦 Deployment package ready"
+        # Create PM2 ecosystem file
+        cat > deploy-dist/ecosystem.config.js << 'PM2FILE'
+        module.exports = {
+          apps: [{
+            name: 'portfolio-backend',
+            script: './main.js',
+            instances: 1,
+            exec_mode: 'fork',
+            env: {
+              NODE_ENV: 'production',
+              PORT: ${{ secrets.DB_PORT}}
+            },
+            error_file: './logs/err.log',
+            out_file: './logs/out.log',
+            log_file: './logs/combined.log',
+            time: true
+          }]
+        };
+        PM2FILE
+        
+        # Create .htaccess for cPanel
+        cat > deploy-dist/.htaccess << 'HTACCESS'
+        RewriteEngine On
+        
+        # Proxy requests to Node.js application
+        RewriteRule ^api/(.*)$ http://localhost:${{ secrets.DB_PORT }}/api/$1 [P,L]
+        
+        # Handle API routes
+        RewriteCond %{REQUEST_URI} ^/api/ [NC]
+        RewriteRule ^ - [L]
+        
+        # Security headers
+        Header always set X-Content-Type-Options nosniff
+        Header always set X-Frame-Options DENY
+        Header always set X-XSS-Protection "1; mode=block"
+        
+        # CORS headers
+        Header always set Access-Control-Allow-Origin "${{ secrets.CORS_ORIGIN }}"
+        Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        
+        # Handle preflight requests
+        RewriteCond %{REQUEST_METHOD} OPTIONS
+        RewriteRule ^(.*)$ $1 [R=200,L]
+        HTACCESS
+        
+        echo "📦 Deployment package structure:"
         ls -la deploy-dist/
+        echo "📁 Contents:"
+        find deploy-dist/ -type f -name "*.js" | head -10
 
     - name: 🚀 FTP Deploy
-      uses: SamKirkland/FTP-Deploy-Action@4.0.0
+      uses: SamKirkland/FTP-Deploy-Action@4.3.4
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
         local-dir: ./deploy-dist/
         server-dir: ${{ secrets.FTP_DEPLOY_PATH }}
+        dangerous-clean-slate: true
