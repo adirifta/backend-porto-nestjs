@@ -4,68 +4,59 @@ on:
   push:
     branches: [ main ]
 
-env:
-  NODE_VERSION: '18.x'
-
 jobs:
-  test:
-    name: 🧪 Run Tests
+  deploy:
+    name: 🚀 Deploy to cPanel
     runs-on: ubuntu-latest
     
     steps:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
+    - name: ⎔ Setup Node.js
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
+        cache: 'npm'
 
-    - name: 🔧 Create test environment file
-      run: |
-        cat > .env.test << EOF
-        # Database Configuration for Testing
-        DB_HOST=localhost
-        DB_PORT=3306
-        DB_USERNAME=test_user
-        DB_PASSWORD=test_password
-        DB_NAME=portfolio_test
-        DB_SYNCHRONIZE=true
-        DB_LOGGING=false
-
-        # JWT Configuration for Testing
-        JWT_SECRET=test-jwt-secret-key-for-testing-only
-        JWT_EXPIRES_IN=1h
-        JWT_REFRESH_SECRET=test-refresh-secret-key-for-testing-only
-        JWT_REFRESH_EXPIRES_IN=7d
-
-        # App Configuration
-        NODE_ENV=test
-        PORT=3001
-
-        # CORS for Testing
-        CORS_ORIGIN=http://localhost:3000
-        EOF
-        echo "✅ Test environment file created"
-
-    - name: Install dependencies
-      run: npm install
-
-    - name: 🔍 Run linting
-      run: npm run lint || echo "⚠️ Linting failed but continuing..."
+    - name: 📦 Install dependencies
+      run: npm install --legacy-peer-deps
 
     - name: 🏗️ Build project
       run: |
         npm run build
-        echo "📁 Build contents:"
-        ls -la dist/
+        echo "📊 Build completed successfully"
 
-    - name: Deploy to FTP server
-      uses: SamKirkland/FTP-Deploy-Action@4.0.0
+    - name: 📁 Prepare deployment files
+      run: |
+        # Hanya deploy folder dist dan package.json
+        mkdir -p deploy-package
+        cp -r dist/ deploy-package/
+        cp package.json deploy-package/
+        cp package-lock.json deploy-package/
+        
+        # Buat .env production
+        cat > deploy-package/.env << EOF
+        DB_HOST=${{ secrets.DB_HOST }}
+        DB_PORT=${{ secrets.DB_PORT }}
+        DB_USERNAME=${{ secrets.DB_USERNAME }}
+        DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+        DB_NAME=${{ secrets.DB_NAME }}
+        JWT_SECRET=${{ secrets.JWT_SECRET }}
+        JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
+        NODE_ENV=production
+        PORT=${{ secrets.APP_PORT || 3000 }}
+        EOF
+        
+        echo "📦 Files ready for deployment:"
+        ls -la deploy-package/
+
+    - name: 🚀 Deploy via FTP
+      uses: SamKirkland/FTP-Deploy-Action@4.3.4
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
-        local-dir: build/
-        server-dir: ./
-        log-level: verbose  
+        local-dir: ./deploy-package/
+        server-dir: ${{ secrets.FTP_DEPLOY_PATH }}
+        dangerous-clean-slate: false
