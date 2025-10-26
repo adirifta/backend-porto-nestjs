@@ -96,3 +96,80 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+### Setup Project dan Dependencies
+
+```bash
+npm install -g @nestjs/cli
+nest new portfolio-backend
+cd portfolio-backend
+
+# Install dependencies
+npm install @nestjs/typeorm typeorm mysql2
+npm install @nestjs/passport passport passport-local
+npm install @nestjs/jwt passport-jwt bcrypt
+npm install class-validator class-transformer
+npm install @nestjs/config
+npm install @nestjs/swagger
+npm install typeorm ts-node tsconfig-paths
+npm install typeorm-seeding
+npm install -D @types/bcrypt
+```
+
+## Cara membuat module
+```bash
+nest generate module user (nama path)
+```
+
+## Cara membuat controller
+```bash
+nest generate controller user (nama path)
+```
+
+## Buat database di mysql dulu
+
+```bash
+portfolio_db
+```
+
+## Buat migration file
+
+```bash
+# Buat migration file kosong
+npm run typeorm -- migration:create src/database/migrations/CreateInitialTables
+
+# Atau generate migration dari entity changes
+npm run typeorm -- migration:generate -d src/data-source.ts src/database/migrations/CreateInitialTables
+```
+
+## Jalankan migration
+
+```bash
+# Run semua pending migrations
+npm run migration:run
+
+# Revert migration terakhir
+npm run migration:revert
+
+# Lihat status migrations
+npm run migration:show
+```
+
+## Run Seeder
+
+```bash
+npm run seed:run
+
+# Run admin seeder only
+npm run seed:admin
+```
+
+## Error saat membuat file dengan nestjs
+```bash
+## Ubah Semua File di Proyek Sekaligus
+## Kamu bisa ubah semua file ke LF menggunakan perintah di terminal:
+npx prettier --write .
+
+## Lalu jalankan:
+npx prettier --write .
+```
