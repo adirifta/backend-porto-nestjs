@@ -74,7 +74,7 @@ jobs:
         module.exports = {
           apps: [{
             name: 'portfolio-backend',
-            script: './main.js',
+            script: './main.ts',
             instances: 1,
             exec_mode: 'fork',
             env: {
@@ -118,7 +118,7 @@ jobs:
         echo "📦 Deployment package structure:"
         ls -la deploy-dist/
         echo "📁 Contents:"
-        find deploy-dist/ -type f -name "*.js" | head -10
+        find deploy-dist/ -type f -name "*.ts" | head -10
 
     - name: 🚀 FTP Deploy
       uses: SamKirkland/FTP-Deploy-Action@4.0.0
