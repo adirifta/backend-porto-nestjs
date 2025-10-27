@@ -1,51 +1,12 @@
-name: Deploy NestJS to cPanel
+name: 🚀 EMERGENCY Deploy - Fix 503 Error
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  test-build:
-    name: 🧪 Test & Build
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-
-    - name: ⎔ Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-
-    - name: 📦 Install dependencies
-      run: |
-        npm ci
-        # Install dev dependencies untuk build
-        npm install @nestjs/cli typescript ts-node
-
-    - name: 🏗️ Build project
-      run: |
-        npm run build
-        echo "✅ Build completed"
-        echo "📁 Build contents:"
-        ls -la dist/
-        echo "📁 JS files in dist:"
-        find dist/ -name "*.js" | head -10
-
-    - name: 🔍 Verify build
-      run: |
-        # Test if built files work
-        node dist/main.js &
-        sleep 5
-        curl -f http://localhost:3000/api/health || echo "Build verification completed"
-
   deploy:
-    name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
-    needs: test-build
-    
     steps:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
@@ -56,202 +17,95 @@ jobs:
         node-version: '18'
         cache: 'npm'
 
-    - name: 📦 Install dependencies
+    - name: 📦 Install & Build
       run: |
         npm ci
-        npm install @nestjs/cli typescript ts-node
-
-    - name: 🏗️ Build project
-      run: |
         npm run build
-        echo "📁 Verifying built files:"
-        ls -la dist/
-        # Pastikan main.js ada
-        test -f dist/main.js && echo "✅ main.js exists" || echo "❌ main.js missing"
+        
+        # Test build locally
+        timeout 10s node dist/main.js &
+        sleep 5
+        curl -f http://localhost:3000/api/health || echo "Build test completed"
 
-    - name: 📁 Create deployment package
+    - name: 🎯 Create SIMPLE Deployment
       run: |
-        # Clean deployment directory
-        rm -rf deploy-dist
-        mkdir -p deploy-dist
+        # Clean and create deployment
+        rm -rf deploy
+        mkdir deploy
         
-        echo "📦 Copying built files..."
-        # Copy ALL JavaScript files from dist
-        cp -r dist/* deploy-dist/
+        # Copy ONLY compiled files
+        cp -r dist/* deploy/
+        cp package.json deploy/
+        cp package-lock.json deploy/
         
-        # Copy package files
-        cp package.json deploy-dist/
-        cp package-lock.json deploy-dist/
-        
-        # Copy necessary configuration files
-        cp -r src/config deploy-dist/config 2>/dev/null || echo "Config directory not found"
-        cp -r src/database deploy-dist/database 2>/dev/null || echo "Database directory not found"
-        
-        echo "📦 Installing production dependencies..."
-        # Install production dependencies in deploy-dist
-        cd deploy-dist
-        npm ci --only=production
-        cd ..
-        
-        # Create .env from secrets
-        cat > deploy-dist/.env << 'ENVFILE'
-        # Production Environment
+        # Create PROPER .env file
+        cat > deploy/.env << 'ENVFILE'
+        # Server Configuration
         NODE_ENV=production
         PORT=3000
         
-        # Database Configuration
-        DB_HOST=${{ secrets.DB_HOST }}
-        DB_PORT=${{ secrets.DB_PORT }}
+        # Database
+        DB_HOST=localhost
+        DB_PORT=3306
         DB_USERNAME=${{ secrets.DB_USERNAME }}
         DB_PASSWORD=${{ secrets.DB_PASSWORD }}
         DB_NAME=${{ secrets.DB_NAME }}
         DB_SYNCHRONIZE=false
-        DB_LOGGING=false
         
-        # JWT Configuration
+        # JWT
         JWT_SECRET=${{ secrets.JWT_SECRET }}
-        JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN || '1h' }}
+        JWT_EXPIRES_IN=1h
         JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
-        JWT_REFRESH_EXPIRES_IN=${{ secrets.JWT_REFRESH_EXPIRES_IN || '7d' }}
+        JWT_REFRESH_EXPIRES_IN=7d
         
-        # CORS Configuration
-        CORS_ORIGIN=${{ secrets.CORS_ORIGIN || 'https://backend-portofolio.adirdk.com' }}
+        # CORS
+        CORS_ORIGIN=https://backend-portofolio.adirdk.com
         ENVFILE
         
-        # Create CORRECT PM2 ecosystem file - FIXED
-        cat > deploy-dist/ecosystem.config.js << 'PM2FILE'
-        module.exports = {
-          apps: [{
-            name: 'portfolio-backend',
-            script: './main.js',  // ⚠️ FIX: Gunakan .js bukan .ts
-            instances: 1,
-            exec_mode: 'fork',
-            env: {
-              NODE_ENV: 'production',
-              PORT: 3000  // ⚠️ FIX: Gunakan PORT bukan DB_PORT
-            },
-            error_file: './logs/error.log',
-            out_file: './logs/out.log',
-            log_file: './logs/combined.log',
-            time: true,
-            watch: false
-          }]
-        };
-        PM2FILE
-        
-        # Create database migration script
-        cat > deploy-dist/run-migrations.js << 'MIGRATIONSCRIPT'
-        const { DataSource } = require('typeorm');
-        require('dotenv').config();
-        
-        const AppDataSource = new DataSource({
-          type: 'mysql',
-          host: process.env.DB_HOST,
-          port: parseInt(process.env.DB_PORT),
-          username: process.env.DB_USERNAME,
-          password: process.env.DB_PASSWORD,
-          database: process.env.DB_NAME,
-          entities: ['**/*.entity.js'],
-          migrations: ['**/migrations/*.js'],
-          synchronize: false,
-        });
-        
-        async function runMigrations() {
-          try {
-            console.log('🔄 Running database migrations...');
-            await AppDataSource.initialize();
-            await AppDataSource.runMigrations();
-            console.log('✅ Database migrations completed successfully');
-            process.exit(0);
-          } catch (error) {
-            console.error('❌ Migration failed:', error);
-            process.exit(1);
-          }
-        }
-        
-        runMigrations();
-        MIGRATIONSCRIPT
-        
-        # Create startup script
-        cat > deploy-dist/start-server.sh << 'STARTSCRIPT'
+        # Create SIMPLE start script
+        cat > deploy/start.sh << 'SCRIPT'
         #!/bin/bash
-        echo "🚀 Starting Portfolio Backend Server..."
+        echo "🚀 STARTING NESTJS API..."
         
-        # Install dependencies if needed
-        if [ ! -d "node_modules" ]; then
-          echo "📦 Installing dependencies..."
-          npm install
-        fi
-        
-        # Run database migrations
-        echo "🔄 Running database migrations..."
-        node run-migrations.js
+        # Install dependencies
+        npm install --production
         
         # Start the application
-        echo "🎯 Starting NestJS application..."
+        echo "📦 Starting application on port 3000..."
         node main.js
-        STARTSCRIPT
+        SCRIPT
         
-        chmod +x deploy-dist/start-server.sh
+        chmod +x deploy/start.sh
         
-        # Create .htaccess for cPanel - FIXED
-        cat > deploy-dist/.htaccess << 'HTACCESS'
-        RewriteEngine On
-        
-        # Proxy requests to Node.js application
-        RewriteRule ^api/(.*)$ http://localhost:3000/api/$1 [P,L]
-        
-        # Handle API routes
-        RewriteCond %{REQUEST_URI} ^/api/ [NC]
-        RewriteRule ^ - [L]
-        
-        # Security headers
-        Header always set X-Content-Type-Options nosniff
-        Header always set X-Frame-Options DENY
-        Header always set X-XSS-Protection "1; mode=block"
-        
-        # CORS headers
-        Header always set Access-Control-Allow-Origin "${{ secrets.CORS_ORIGIN || 'https://backend-portofolio.adirdk.com' }}"
-        Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-        Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
-        
-        # Handle preflight requests
-        RewriteCond %{REQUEST_METHOD} OPTIONS
-        RewriteRule ^(.*)$ $1 [R=200,L]
-        HTACCESS
-        
-        echo "📦 Deployment package created:"
-        ls -la deploy-dist/
-        echo "📁 Main files:"
-        ls -la deploy-dist/main.js
-        ls -la deploy-dist/package.json
-        ls -la deploy-dist/.env
+        echo "✅ Deployment package ready"
+        ls -la deploy/
 
-    - name: 🚀 FTP Deploy
-      uses: SamKirkland/FTP-Deploy-Action@4.0.0
+    - name: 📤 Upload via FTP
+      uses: SamKirkland/FTP-Deploy-Action@4.3.4
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
-        local-dir: ./deploy-dist/
+        local-dir: ./deploy/
         server-dir: ${{ secrets.FTP_DEPLOY_PATH }}
         dangerous-clean-slate: true
 
-    - name: 📋 Post-deployment instructions
+    - name: 📋 Manual Setup Commands
       run: |
-        echo "🚀 DEPLOYMENT COMPLETED!"
+        echo "🎯 MANUAL SETUP REQUIRED ON SERVER:"
         echo ""
-        echo "📋 MANUAL STEPS REQUIRED ON SERVER:"
-        echo "1. SSH into your cPanel server"
-        echo "2. Run: cd $HOME/public_html/backend"
-        echo "3. Run: chmod +x start-server.sh"
-        echo "4. Run: npm install -g pm2"
-        echo "5. Run: pm2 start ecosystem.config.js"
-        echo "6. Run: pm2 save"
-        echo "7. Run: pm2 startup (if needed)"
+        echo "1. SSH into your cPanel:"
+        echo "   ssh your_user@your_server"
         echo ""
-        echo "🔍 To check if it's working:"
+        echo "2. Run these commands:"
+        echo "   cd ~/public_html/backend"
+        echo "   npm install"
+        echo "   node main.js"
+        echo ""
+        echo "3. Test if working:"
         echo "   curl http://localhost:3000/api/health"
         echo ""
-        echo "📊 Check PM2 status: pm2 status"
-        echo "📝 Check logs: pm2 logs portfolio-backend"
+        echo "4. For permanent run with PM2:"
+        echo "   npm install -g pm2"
+        echo "   pm2 start main.js --name portfolio-api"
+        echo "   pm2 save"
